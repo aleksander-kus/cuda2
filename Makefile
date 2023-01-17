@@ -1,2 +1,2 @@
-kmeans:
-	nvcc kmeans.cu -o kmeans.out
+main:
+	nvcc main.cu kmeansgpu.cu kmeanscpu.cu -o kmeans.out

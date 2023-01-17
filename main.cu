@@ -4,30 +4,33 @@
 #include <chrono>
 #include <bitset>
 #include <getopt.h>
+#include <sstream>
 
-// bool readSudokuFromFile(std::string filepath, char* board)
-// {
-//     std::ifstream fileStream(filepath);
-//     if(!fileStream.good())
-//     {
-//         return false;
-//     }
-//     std::string input;
-//     int index = 0;
-//     while (getline(fileStream, input))
-//     {
-//         for (auto c : input)
-//         {
-//             auto num = c - '0';
-//             if (num < 0 || num > 9)
-//             {
-//                 return false;
-//             }
-//             board[index++] = num;
-//         }
-//     }
-//     return true;
-// }
+#include "kmeanscpu.cuh"
+#include "kmeansgpu.cuh"
+
+template<unsigned int n>
+float* readObjectsFromFile(std::string filepath, int* N)
+{
+    std::ifstream fileStream(filepath);
+    if(!fileStream.good())
+    {
+        return NULL;
+    }
+    std::string input, number;
+    getline(fileStream, input);
+    *N = stoi(input);
+    auto objects = new float[n * (*N)];
+    int index = 0;
+    while (getline(fileStream, input))
+    {
+        std::istringstream stream(input);
+        while(getline(stream, number, ' ')) {
+            objects[index++] = stof(number);
+        }
+    }
+    return objects;
+}
 
 // void printSudoku(char* board)
 // {
@@ -169,46 +172,53 @@ void usage()
 
 int main(int argc, char** argv)
 {
-    // int c;
-    // bool isCpuOnly = false;
-    // bool isGpuOnly = false;
-    // static struct option long_options[] = {
-    //     {"cpu-only", no_argument, NULL, 'c'},
-    //     {"gpu-only", no_argument, NULL, 'g'},
-    //     { NULL, 0, NULL, 0 }
-    // };
+    int c;
+    bool isCpuOnly = false;
+    bool isGpuOnly = false;
+    static struct option long_options[] = {
+        {"cpu-only", no_argument, NULL, 'c'},
+        {"gpu-only", no_argument, NULL, 'g'},
+        { NULL, 0, NULL, 0 }
+    };
 
-    // while (1)
-    // {
-    //     c = getopt_long(argc, argv, "cg", long_options, NULL);
-    //     if(c == -1)
-    //         break;
+    while (1)
+    {
+        c = getopt_long(argc, argv, "cg", long_options, NULL);
+        if(c == -1)
+            break;
 
-    //     switch(c)
-    //     {
-    //         case 'c':
-    //             isCpuOnly = true;
-    //             break;
-    //         case 'g':
-    //             isGpuOnly = true;
-    //             break;
-    //         default:
-    //             usage();
-    //             break;
-    //     }
-    // }
+        switch(c)
+        {
+            case 'c':
+                isCpuOnly = true;
+                break;
+            case 'g':
+                isGpuOnly = true;
+                break;
+            default:
+                usage();
+                break;
+        }
+    }
 
-    // if (optind != argc - 1) {
-    //     usage();
-    // }
+    if (optind != argc - 1) {
+        usage();
+    }
 
-    // std::string filepath = argv[optind++];
+    std::string filepath = argv[optind++];
 
-    // if(isCpuOnly && isGpuOnly)
-    // {
-    //     std::cout << "The -c and -g flags are mutually exclusive" << std::endl;
-    //     exit(EXIT_FAILURE);
-    // }
+    if(isCpuOnly && isGpuOnly)
+    {
+        std::cout << "The -c and -g flags are mutually exclusive" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    int kekium = 0;
+    auto objects = readObjectsFromFile<2>(filepath, &kekium);
+
+    kmeansGpu<2>(objects, kekium, 2);
+    //kmeansGpu<2>();
+
+    delete[] objects;
 
     // // data in our board will always be from range <1, 9>, so we use chars as they use only 1B of memory
     // char board[BOARDLENGTH];
@@ -280,6 +290,5 @@ int main(int argc, char** argv)
     // {
     //     delete[] resultGpu;
     // }
-    std::cout << "Helo" << std::endl;
     return 0;
 }
