@@ -9,6 +9,8 @@
 #include "kmeanscpu.cuh"
 #include "kmeansgpu.cuh"
 
+#define DIM 2
+
 template<unsigned int n>
 float* readObjectsFromFile(std::string filepath, int* N)
 {
@@ -30,6 +32,36 @@ float* readObjectsFromFile(std::string filepath, int* N)
         }
     }
     return objects;
+}
+
+template<unsigned int n>
+void writeResultsToFile(const char* membershipFilePath, const char* centersFilePath, int N, int k, int* membership, float* centers)
+{
+    std::ofstream membershipFileStream(membershipFilePath, std::ofstream::out | std::ofstream::trunc);
+    if(!membershipFileStream.good())
+    {
+        std::cout << "kekium";
+        return;
+    }
+    for(int i = 0; i < N; ++i)
+    {
+        membershipFileStream << membership[i] << std::endl;
+    }
+    membershipFileStream.close();
+    std::ofstream centersFileStream(centersFilePath, std::ofstream::out | std::ofstream::trunc);
+    if(!centersFileStream.good())
+    {
+        return;
+    }
+    for(int i = 0; i < k; ++i)
+    {
+        for(int j = 0; j < n; ++j)
+        {
+            centersFileStream << centers[i * n + j] << " ";
+        }
+        centersFileStream << std::endl;
+    }
+    centersFileStream.close();
 }
 
 // void printSudoku(char* board)
@@ -162,7 +194,7 @@ float* readObjectsFromFile(std::string filepath, int* N)
 void usage()
 {
     std::cout << "Usage:" << std::endl;
-    std::cout << "  solver.out [options] filepath" << std::endl;
+    std::cout << "  kmeans.out [options] filepath" << std::endl;
     std::cout << std::endl;
     std::cout << "Options:" << std::endl;
     std::cout << "  -c, --cpu-only      only run cpu algorithm" << std::endl;
@@ -212,83 +244,67 @@ int main(int argc, char** argv)
         std::cout << "The -c and -g flags are mutually exclusive" << std::endl;
         exit(EXIT_FAILURE);
     }
-    int kekium = 0;
-    auto objects = readObjectsFromFile<2>(filepath, &kekium);
+    
+    int N = 0; // number of objects
+    int k = 3;
+    auto objects = readObjectsFromFile<DIM>(filepath, &N);
 
-    kmeansGpu<2>(objects, kekium, 2);
-    //kmeansGpu<2>();
+    float* cpuCenters, *gpuCenters;
+    int* cpuMembership, *gpuMembership;
+    if (!isGpuOnly)
+    {
+        cpuMembership = kmeansCpu<DIM>(objects, N, k, &cpuCenters);
+
+        writeResultsToFile<DIM>("results/cpu.membership", "results/cpu.centers", N, k, cpuMembership, cpuCenters);
+
+        for (int i = 0; i < k; ++i)
+        {
+            std::cout << "CLUSTER " << i << std::endl;
+            std::cout << "MEMBERS" << std::endl;
+            for (int j = 0; j < N; ++j)
+            {
+                if (cpuMembership[j] != i)
+                    continue;
+                for (int l = 0; l < DIM; ++l)
+                {
+                    std::cout << objects[j * DIM + l] << " ";
+                }
+                std::cout << std::endl;
+            }
+            std::cout << "CENTER IS " << cpuCenters[i * DIM] << ' ' << cpuCenters[i * DIM + 1] << std::endl;
+            std::cout << std::endl;
+        }
+    }
+
+    if (!isCpuOnly)
+    {
+        gpuMembership = kmeansCpu<DIM>(objects, N, k, &gpuCenters);
+
+        writeResultsToFile<DIM>("results/cpu.membership", "results/cpu.centers", N, k, gpuMembership, gpuCenters);
+
+        for (int i = 0; i < k; ++i)
+        {
+            std::cout << "CLUSTER " << i << std::endl;
+            std::cout << "MEMBERS" << std::endl;
+            for (int j = 0; j < N; ++j)
+            {
+                if (gpuMembership[j] != i)
+                    continue;
+                for (int l = 0; l < DIM; ++l)
+                {
+                    std::cout << objects[j * DIM + l] << " ";
+                }
+                std::cout << std::endl;
+            }
+            std::cout << "CENTER IS " << gpuCenters[i * DIM] << ' ' << gpuCenters[i * DIM + 1] << std::endl;
+            std::cout << std::endl;
+        }
+    }
 
     delete[] objects;
-
-    // // data in our board will always be from range <1, 9>, so we use chars as they use only 1B of memory
-    // char board[BOARDLENGTH];
-
-    // if(!readSudokuFromFile(filepath, board))
-    // {
-    //     std::cout << "Error reading from file" << std::endl;
-    //     exit(EXIT_FAILURE);
-    // }
-
-    // printSudoku(board);
-
-    // if(!checkIfSudokuValid(board))
-    // {
-    //     std::cout << "Given sudoku is invalid" << std::endl;
-    //     exit(EXIT_FAILURE);
-    // }
-
-    // char* resultCpu = nullptr, *resultGpu = nullptr;
-
-    // if(!isGpuOnly)
-    // {
-    //     std::cout << "Solving sudoku cpu..." << std::endl;
-    //     auto start = std::chrono::high_resolution_clock::now();
-    //     resultCpu = solveCpu(board);
-    //     auto stop = std::chrono::high_resolution_clock::now();
-    //     if(resultCpu != nullptr)
-    //     {
-    //         std::cout << "Cpu solution: " << std::endl;
-    //         printSudoku(resultCpu);
-    //     }
-    //     else
-    //     {
-    //         std::cout << "Cpu did not find a solution" << std::endl;
-    //     }
-    //     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    //     std::cout << "Total time for cpu: " << duration.count() << " microseconds" << std::endl;
-    // }
-
-    // if(!isCpuOnly)
-    // {
-    //     std::cout << "Solving sudoku gpu..." << std::endl;
-    //     auto start = std::chrono::high_resolution_clock::now();
-    //     resultGpu = solveGpu(board);
-    //     auto stop = std::chrono::high_resolution_clock::now();
-    //     if(resultGpu != nullptr)
-    //     {
-    //         std::cout << "Gpu solution: " << std::endl;
-    //         printSudoku(resultGpu);
-    //     }
-    //     else
-    //     {
-    //         std::cout << "Gpu did not find a solution" << std::endl;
-    //     }
-    //     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    //     std::cout << "Total time for gpu: " << duration.count() << " microseconds" << std::endl;
-    // }
-
-    // if(!isCpuOnly && !isGpuOnly)
-    // {
-    //     compareResults(resultCpu, resultGpu);
-    // }
-
-    // if( resultCpu != nullptr)
-    // {
-    //     delete[] resultCpu;
-    // }
-    // if (resultGpu != nullptr)
-    // {
-    //     delete[] resultGpu;
-    // }
+    delete[] cpuMembership;
+    delete[] cpuCenters;
+    delete[] gpuMembership;
+    delete[] gpuCenters;
     return 0;
 }
