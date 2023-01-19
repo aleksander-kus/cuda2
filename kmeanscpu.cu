@@ -3,7 +3,7 @@
 #include <iostream>
 
 template <unsigned int n>
-inline float distanceSquared(const float* object1, const float* object2)
+__host__ __device__ inline float distanceSquared(const float* object1, const float* object2)
 {
     float sum = 0;
     for(int i = 0; i < n; ++i)
@@ -14,7 +14,7 @@ inline float distanceSquared(const float* object1, const float* object2)
 }
 
 template <unsigned int n>
-inline int getClosestCenterIndex(const float* object, const float* centers, int k)
+__host__ __device__ inline int getClosestCenterIndex(const float* object, const float* centers, int k)
 {
     float minDistance = __FLT_MAX__;
     int minIndex = -1;
@@ -22,7 +22,7 @@ inline int getClosestCenterIndex(const float* object, const float* centers, int 
     {
         // calculate distance to center with index j
         auto dist = distanceSquared<n>(object, centers + (j * n));
-        if(dist < minDistance)
+        if (dist < minDistance) // x^2 is monotonous on <0, +inf) so we can compare squared distances
         {
             minDistance = dist;
             minIndex = j;
@@ -72,16 +72,20 @@ int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float 
         //std::cout << "Delta " << delta << " N " << N << std::endl;
 
         // calculate new cluster centers as averages of cluster members
-        for(int i = 0; i < k; ++i)
+        for (int i = 0; i < k; ++i)
         {
-            for(int j = 0; j < n; ++j)
+            if (newClusterSizes[i] == 0)
+            {
+                continue;
+            }
+            for (int j = 0; j < n; ++j)
             {
                 centers[i * n + j] = newCenters[i * n + j] / newClusterSizes[i];
                 //std::cout << centers[i * n + j] << ' ';
             }
             //std::cout << std::endl;
         }
-        std::cout << "End of an iteration" << std::endl;
+        std::cout << "End of an iteration with delta " << delta << std::endl;
     } while ((float)delta / N > threshold);
 
     delete[] newCenters;

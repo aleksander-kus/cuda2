@@ -5,11 +5,12 @@
 #include <bitset>
 #include <getopt.h>
 #include <sstream>
+#include <cstdlib>
 
 #include "kmeanscpu.cuh"
 #include "kmeansgpu.cuh"
 
-#define DIM 2
+#define SMALL_DIM 2
 
 template<unsigned int n>
 float* readObjectsFromFile(std::string filepath, int* N)
@@ -64,132 +65,22 @@ void writeResultsToFile(const char* membershipFilePath, const char* centersFileP
     centersFileStream.close();
 }
 
-// void printSudoku(char* board)
-// {
-//     const std::string lineBreak = "+-------+-------+-------+\n";
-//     const std::string columnBreak = "| ";
+template<unsigned int n>
+float* generateRandomData(int N)
+{
+    srand(1234);
 
-//     for (auto i = 0; i < BOARDSIZE; ++i)
-//     {
-//         if (i % 3 == 0)
-//         {
-//             std::cout << lineBreak;
-//         }
-//         for (auto j = 0; j < BOARDSIZE; ++j)
-//         {
-//             if (j % 3 == 0)
-//             {
-//                 std::cout << columnBreak;
-//             }
+    float* data = new float[N * n];
+    for(int i = 0; i < N; ++i)
+    {
+        for(int j = 0; j < n; ++j)
+        {
+            data[i * n + j] = -1000 + (rand() % 2000);
+        }
+    }
 
-//             auto value = board[i * BOARDSIZE + j];
-//             if (value == BLANK)
-//             {
-//                 std::cout << ". ";
-//             }
-//             else
-//             {
-//                 std::cout << (int)value << ' ';
-//             }
-//         }
-//         std::cout << columnBreak << std::endl;
-//     }
-//     std::cout << lineBreak;
-// }
-
-// bool checkIfSudokuValid(const char* board)
-// {
-//     std::bitset<10> bitset;
-//     // check rows
-//     for (int i = 0; i < BOARDSIZE; ++i)
-//     {
-//         for (int j = 0; j < BOARDSIZE; ++j)
-//         {
-//             auto value = board[i * BOARDSIZE + j];
-//             if (value == BLANK)
-//             {
-//                 continue;
-//             }
-//             if (bitset.test(value))
-//             {
-//                 return false;
-//             }
-//             bitset.set(value, true);
-//         }
-//         bitset.reset();
-//     }
-
-//     // check columns
-//     for (int j = 0; j < BOARDSIZE; ++j)
-//     {
-//         for (int i = 0; i < BOARDSIZE; ++i)
-//         {
-//             auto value = board[i * BOARDSIZE + j];
-//             if (value == BLANK)
-//             {
-//                 continue;
-//             }
-//             if (bitset.test(value))
-//             {
-//                 return false;
-//             }
-//             bitset.set(value, true);
-//         }
-//         bitset.reset();
-//     }
-
-//     // check boxes
-//     for (int i = 0; i < 3; ++i)
-//     {
-//         for (int j = 0; j < 3; ++j)
-//         {
-//             int rowCenter = (i / 3) * 3 + 1;
-//             int columnCenter = (j / 3) * 3 + 1;
-//             for (int k = -1; k < 2; ++k)
-//             {
-//                 for (int l = -1; l < 2; ++l)
-//                 {
-//                     auto value = board[(rowCenter + k) * BOARDSIZE + (columnCenter + l)];
-//                     if (value == BLANK)
-//                     {
-//                         continue;
-//                     }
-//                     if (bitset.test(value))
-//                     {
-//                         return false;
-//                     }
-//                     bitset.set(value, true);
-//                 }
-//             }
-//             bitset.reset();
-//         }
-//     }
-
-//     return true;
-// }
-
-// void compareResults(char* cpu, char* gpu)
-// {
-//     bool ok = true;
-//     for (int i = 0; i < BOARDSIZE; ++i)
-//     {
-//         for (int j = 0; j < BOARDSIZE; ++j)
-//         {
-//             if (cpu[i * BOARDSIZE + j] != gpu[i * BOARDSIZE + j])
-//             {
-//                 ok = false;
-//             }
-//         }
-//     }
-//     if (ok)
-//     {
-//         std::cout << "Cpu and gpu results match" << std::endl;
-//     }
-//     else
-//     {
-//         std::cout << "Cpu and gpu results don't match" << std::endl;
-//     }
-// }
+    return data;
+}
 
 void usage()
 {
@@ -245,60 +136,35 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
     
-    int N = 0; // number of objects
-    int k = 3;
-    auto objects = readObjectsFromFile<DIM>(filepath, &N);
+    int N = 2000000; // number of objects
+    int k = 10;
+    //auto objects = readObjectsFromFile<SMALL_DIM>(filepath, &N);
+    auto objects = generateRandomData<SMALL_DIM>(N);
 
     float* cpuCenters, *gpuCenters;
     int* cpuMembership, *gpuMembership;
     if (!isGpuOnly)
     {
-        cpuMembership = kmeansCpu<DIM>(objects, N, k, &cpuCenters);
+        std::cout << "Solving kmeans cpu..." << std::endl;
+        auto start = std::chrono::high_resolution_clock::now();
+        cpuMembership = kmeansCpu<SMALL_DIM>(objects, N, k, &cpuCenters);
+        auto stop = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+        std::cout << "Total time for cpu: " << duration.count() << " microseconds" << std::endl;
 
-        writeResultsToFile<DIM>("results/cpu.membership", "results/cpu.centers", N, k, cpuMembership, cpuCenters);
-
-        for (int i = 0; i < k; ++i)
-        {
-            std::cout << "CLUSTER " << i << std::endl;
-            std::cout << "MEMBERS" << std::endl;
-            for (int j = 0; j < N; ++j)
-            {
-                if (cpuMembership[j] != i)
-                    continue;
-                for (int l = 0; l < DIM; ++l)
-                {
-                    std::cout << objects[j * DIM + l] << " ";
-                }
-                std::cout << std::endl;
-            }
-            std::cout << "CENTER IS " << cpuCenters[i * DIM] << ' ' << cpuCenters[i * DIM + 1] << std::endl;
-            std::cout << std::endl;
-        }
+        writeResultsToFile<SMALL_DIM>("results/cpu.membership", "results/cpu.centers", N, k, cpuMembership, cpuCenters);
     }
 
     if (!isCpuOnly)
     {
-        gpuMembership = kmeansCpu<DIM>(objects, N, k, &gpuCenters);
+        std::cout << "Solving kmeans cpu..." << std::endl;
+        auto start = std::chrono::high_resolution_clock::now();
+        gpuMembership = kmeansGpu<SMALL_DIM>(objects, N, k, &gpuCenters);
+        auto stop = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+        std::cout << "Total time for cpu: " << duration.count() << " microseconds" << std::endl;
 
-        writeResultsToFile<DIM>("results/cpu.membership", "results/cpu.centers", N, k, gpuMembership, gpuCenters);
-
-        for (int i = 0; i < k; ++i)
-        {
-            std::cout << "CLUSTER " << i << std::endl;
-            std::cout << "MEMBERS" << std::endl;
-            for (int j = 0; j < N; ++j)
-            {
-                if (gpuMembership[j] != i)
-                    continue;
-                for (int l = 0; l < DIM; ++l)
-                {
-                    std::cout << objects[j * DIM + l] << " ";
-                }
-                std::cout << std::endl;
-            }
-            std::cout << "CENTER IS " << gpuCenters[i * DIM] << ' ' << gpuCenters[i * DIM + 1] << std::endl;
-            std::cout << std::endl;
-        }
+        writeResultsToFile<SMALL_DIM>("results/gpu.membership", "results/gpu.centers", N, k, gpuMembership, gpuCenters);
     }
 
     delete[] objects;

@@ -12,7 +12,7 @@
 // __host__ __device__ bool tryToInsert(const char* board, const int& i, const int& j, const char& value);
 
 template <unsigned int n>
-int* kmeansGpu(const float* objects, int N, int k);
+int* kmeansGpu(const float* objects, int N, int k, float** centersOutput, float threshold = 0.001f);
 
 #include "kmeansgpu.cu"
 
