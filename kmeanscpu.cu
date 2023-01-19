@@ -1,7 +1,9 @@
 #define NO_MEMBERSHIP -1
 
+#include <iostream>
+
 template <unsigned int n>
-float distanceSquared(const float* object1, const float* object2)
+inline float distanceSquared(const float* object1, const float* object2)
 {
     float sum = 0;
     for(int i = 0; i < n; ++i)
@@ -12,12 +14,30 @@ float distanceSquared(const float* object1, const float* object2)
 }
 
 template <unsigned int n>
+inline int getClosestCenterIndex(const float* object, const float* centers, int k)
+{
+    float minDistance = __FLT_MAX__;
+    int minIndex = -1;
+    for (int j = 0; j < k; ++j)
+    {
+        // calculate distance to center with index j
+        auto dist = distanceSquared<n>(object, centers + (j * n));
+        if(dist < minDistance)
+        {
+            minDistance = dist;
+            minIndex = j;
+        }
+    }
+    return minIndex;
+}
+
+template <unsigned int n>
 int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float threshold)
 {
     auto delta = 0;
     float* centers = new float[k * n];
     auto membership = new int[N];
-    float* newCenters = new float[k*n];
+    float* newCenters = new float[k * n];
     int* newClusterSizes = new int[k];
 
     memset(membership, NO_MEMBERSHIP, N * sizeof(int));
@@ -32,22 +52,12 @@ int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float 
         {
             const float* object = objects + (i * n);
             // find the closest center
-            float minDistance = INT_MAX;
-            int minDistanceIndex = -1;
-            for (int j = 0; j < k; ++j)
-            {
-                // calculate distance to center with index j
-                auto dist = distanceSquared<n>(object, centers + (j * n));
-                if(dist < minDistance)
-                {
-                    minDistance = dist;
-                    minDistanceIndex = j;
-                }
-            }
-            if (membership[i] != minDistanceIndex)
+            auto closestCenterIndex = getClosestCenterIndex<n>(object, centers, k);
+            
+            if (membership[i] != closestCenterIndex)
             {
                 // if the center has changed, increment delta
-                membership[i] = minDistanceIndex;
+                membership[i] = closestCenterIndex;
                 ++delta;
             }
 
@@ -61,12 +71,6 @@ int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float 
 
         //std::cout << "Delta " << delta << " N " << N << std::endl;
 
-        // if there were sufficiently few changes, stop
-        if((float)delta/N <= threshold)
-        {
-            break;
-        }
-
         // calculate new cluster centers as averages of cluster members
         for(int i = 0; i < k; ++i)
         {
@@ -77,8 +81,8 @@ int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float 
             }
             //std::cout << std::endl;
         }
-        //std::cout << "End of an iteration" << std::endl;
-    } while(true);
+        std::cout << "End of an iteration" << std::endl;
+    } while ((float)delta / N > threshold);
 
     delete[] newCenters;
     delete[] newClusterSizes;
