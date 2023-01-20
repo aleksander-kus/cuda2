@@ -167,10 +167,19 @@ int main(int argc, char** argv)
         writeResultsToFile<SMALL_DIM>("results/gpu.membership", "results/gpu.centers", N, k, gpuMembership, gpuCenters);
     }
 
+    std::cout << "Deleting objects..." << std::endl;
     delete[] objects;
-    delete[] cpuMembership;
-    delete[] cpuCenters;
-    delete[] gpuMembership;
-    delete[] gpuCenters;
+    if(!isGpuOnly)
+    {
+        std::cout << "Deleting objects cpu..." << std::endl;
+        delete[] cpuMembership;
+        delete[] cpuCenters;
+    }
+    if(!isCpuOnly)
+    {
+        std::cout << "Deleting objects gpu..." << std::endl;
+        delete[] gpuMembership;
+        delete[] gpuCenters;
+    }
     return 0;
 }

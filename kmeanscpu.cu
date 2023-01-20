@@ -37,8 +37,8 @@ int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float 
     auto delta = 0;
     float* centers = new float[k * n];
     auto membership = new int[N];
-    float* newCenters = new float[k * n];
-    int* newClusterSizes = new int[k];
+    float* clusterSum = new float[k * n];
+    int* clusterCount = new int[k];
 
     memset(membership, NO_MEMBERSHIP, N * sizeof(int));
     // initialize cluster centers as first k objects
@@ -46,14 +46,14 @@ int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float 
 
     do {
         delta = 0;
-        memset(newCenters, 0, k * n * sizeof(float));
-        memset(newClusterSizes, 0, k * sizeof(int));
+        memset(clusterSum, 0, k * n * sizeof(float));
+        memset(clusterCount, 0, k * sizeof(int));
         for (int i = 0; i < N; ++i)
         {
             const float* object = objects + (i * n);
             // find the closest center
             auto closestCenterIndex = getClosestCenterIndex<n>(object, centers, k);
-            
+
             if (membership[i] != closestCenterIndex)
             {
                 // if the center has changed, increment delta
@@ -62,10 +62,10 @@ int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float 
             }
 
             // calculate sum of all cluster members
-            ++newClusterSizes[membership[i]];
+            ++clusterCount[membership[i]];
             for(int l = 0; l < n; ++l)
             {
-                newCenters[membership[i] * n + l] += object[l];
+                clusterSum[membership[i] * n + l] += object[l];
             }
         }
 
@@ -74,13 +74,13 @@ int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float 
         // calculate new cluster centers as averages of cluster members
         for (int i = 0; i < k; ++i)
         {
-            if (newClusterSizes[i] == 0)
+            if (clusterCount[i] == 0)
             {
                 continue;
             }
             for (int j = 0; j < n; ++j)
             {
-                centers[i * n + j] = newCenters[i * n + j] / newClusterSizes[i];
+                centers[i * n + j] = clusterSum[i * n + j] / clusterCount[i];
                 //std::cout << centers[i * n + j] << ' ';
             }
             //std::cout << std::endl;
@@ -88,8 +88,8 @@ int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float 
         std::cout << "End of an iteration with delta " << delta << std::endl;
     } while ((float)delta / N > threshold);
 
-    delete[] newCenters;
-    delete[] newClusterSizes;
+    delete[] clusterSum;
+    delete[] clusterCount;
     *centersOutput = centers;
     return membership;
 }
