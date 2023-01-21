@@ -16,7 +16,7 @@
 }
 
 template<unsigned int n>
-__global__ void getClosestCenters(const float* objects, int N, int k, const float* centers, int* membership, bool* membershipChanged)
+__global__ void getClosestCenters(const float* objects, int N, int k, const float* centers, int* membership, int* membershipChanged)
 {
     auto objectId = blockDim.x * blockIdx.x + threadIdx.x;
     while (objectId < N)
@@ -29,12 +29,41 @@ __global__ void getClosestCenters(const float* objects, int N, int k, const floa
         {
             // if the center has changed, increment delta
             membership[objectId] = closestCenterIndex;
-            membershipChanged[objectId] = true;
+            membershipChanged[objectId] = 1;
         }
 
         objectId += gridDim.x + blockDim.x;
     }
 }
+
+template<unsigned int n>
+__global__ void calculateDelta(const int *membershipChanged, int arraySize, int *result) {
+    __shared__ int shared[BLOCK_SIZE];
+    const int gridSize = BLOCK_SIZE*gridDim.x;
+    int threadId = threadIdx.x;
+    int globalThreadId = threadId + blockIdx.x*BLOCK_SIZE;
+
+    auto sum = 0;
+    for (int i = globalThreadId; i < arraySize; i += gridSize)
+        sum += membershipChanged[i];
+    shared[threadId] = sum;
+    __syncthreads();
+
+    for (int i = BLOCK_SIZE / 2; i > 0; i >>= 1) 
+    {
+        if (threadId<i)
+        {
+            shared[threadId] += shared[threadId+i];
+        }
+        __syncthreads();
+    }
+
+    if (threadId == 0)
+    {
+        result[blockIdx.x] = shared[0];
+    }
+}
+
 
 template<unsigned int n>
 __global__ void calculateNewCenters(float* centers, const float* clusterSum, const int* clusterCount, int k)
@@ -58,48 +87,44 @@ int* kmeansGpu(const float* objects, int N, int k, float** centersOutput, float 
     int gridSize = (float)N / BLOCK_SIZE + 1; // we want to have enough threads to cover the whole objects array (one thread -> one object)
     auto delta = 0;
     auto membership = new int[N];
-    auto membershipChanged = new bool[N];
     float* clusterSum = new float[k * n];
     int* clusterCount = new int[k];
 
     float* dev_objects = 0;
-    //int* dev_delta = 0;
     float* dev_centers = 0;
     int* dev_membership = 0;
-    bool* dev_membershipChanged = 0;
+    int* dev_membershipChanged = 0;
     float* dev_clusterSum = 0;
     int* dev_clusterCount = 0;
+    int* dev_deltaSum = 0;
     ERR(cudaMalloc(&dev_objects, N * n * sizeof(float)));
     ERR(cudaMalloc(&dev_centers, k * n * sizeof(float)));
     ERR(cudaMalloc(&dev_membership, N * sizeof(int)));
-    ERR(cudaMalloc(&dev_membershipChanged, N * sizeof(bool)));
+    ERR(cudaMalloc(&dev_membershipChanged, N * sizeof(int)));
     ERR(cudaMalloc(&dev_clusterSum, k * n * sizeof(float)));
     ERR(cudaMalloc(&dev_clusterCount, k * sizeof(int)));
-    //ERR(cudaMalloc(&dev_delta, sizeof(int)));
+    ERR(cudaMalloc(&dev_deltaSum, gridSize * sizeof(int)));
     ERR(cudaMemcpy(dev_objects, objects, N * n * sizeof(float), cudaMemcpyKind::cudaMemcpyHostToDevice));
     ERR(cudaMemset(dev_membership, NO_MEMBERSHIP, N * sizeof(int)));
 
     memset(membership, NO_MEMBERSHIP, N * sizeof(int));
     // initialize cluster centers as first k objects
     ERR(cudaMemcpy(dev_centers, objects, k * n * sizeof(float), cudaMemcpyKind::cudaMemcpyHostToDevice));
-    //memcpy(centers, objects, k * n * sizeof(float));
 
     do {
-        delta = 0;
-        //ERR(cudaMemset(dev_delta, 0, sizeof(int)));
-        ERR(cudaMemset(dev_membershipChanged, 0, N * sizeof(bool)));
-        //ERR(cudaMemcpy(dev_centers, centers, k * n * sizeof(float), cudaMemcpyKind::cudaMemcpyHostToDevice));
+        ERR(cudaMemset(dev_membershipChanged, 0, N * sizeof(int)));
+        ERR(cudaMemset(dev_deltaSum, 0, gridSize * sizeof(int)));
         getClosestCenters<n><<<gridSize, BLOCK_SIZE>>>(dev_objects, N, k, dev_centers, dev_membership, dev_membershipChanged);
-        //ERR(cudaMemcpy(&delta, dev_delta, sizeof(int), cudaMemcpyKind::cudaMemcpyDeviceToHost));
         ERR(cudaMemcpy(membership, dev_membership, N * sizeof(int), cudaMemcpyKind::cudaMemcpyDeviceToHost));
-        ERR(cudaMemcpy(membershipChanged, dev_membershipChanged, N * sizeof(bool), cudaMemcpyKind::cudaMemcpyDeviceToHost));
+
+        calculateDelta<n><<<gridSize, BLOCK_SIZE>>>(dev_membershipChanged, N, dev_deltaSum);
+        calculateDelta<n><<<1, BLOCK_SIZE>>>(dev_deltaSum, gridSize, dev_deltaSum);
+        ERR(cudaMemcpy(&delta, dev_deltaSum, sizeof(int), cudaMemcpyKind::cudaMemcpyDeviceToHost));
         memset(clusterSum, 0, k * n * sizeof(float));
         memset(clusterCount, 0, k * sizeof(int));
 
         for (int i = 0; i < N; ++i)
         {
-            if(membershipChanged[i])
-                ++delta;
             auto object = objects + (i * n);
             // calculate sum of all cluster members
             ++clusterCount[membership[i]];
@@ -124,8 +149,7 @@ int* kmeansGpu(const float* objects, int N, int k, float** centersOutput, float 
     ERR(cudaFree(dev_membershipChanged));
     ERR(cudaFree(dev_clusterSum));
     ERR(cudaFree(dev_clusterCount));
-    //ERR(cudaFree(dev_delta));
-    delete[] membershipChanged;
+    ERR(cudaFree(dev_deltaSum));
     delete[] clusterSum;
     delete[] clusterCount;
     

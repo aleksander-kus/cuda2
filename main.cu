@@ -7,10 +7,9 @@
 #include <sstream>
 #include <cstdlib>
 
-#include "kmeanscpu.cuh"
 #include "kmeansgpu.cuh"
 
-#define SMALL_DIM 2
+#define SMALL_DIM 1024
 
 template<unsigned int n>
 float* readObjectsFromFile(std::string filepath, int* N)
@@ -85,7 +84,7 @@ float* generateRandomData(int N)
 void usage()
 {
     std::cout << "Usage:" << std::endl;
-    std::cout << "  kmeans.out [options] filepath" << std::endl;
+    std::cout << "  kmeans.out [options] filepath k N" << std::endl;
     std::cout << std::endl;
     std::cout << "Options:" << std::endl;
     std::cout << "  -c, --cpu-only      only run cpu algorithm" << std::endl;
@@ -124,11 +123,13 @@ int main(int argc, char** argv)
         }
     }
 
-    if (optind != argc - 1) {
-        usage();
-    }
+    // if (optind != argc - 1) {
+    //     usage();
+    // }
 
     std::string filepath = argv[optind++];
+    int k = atoi(argv[optind++]);
+    int N = atoi(argv[optind++]);
 
     if(isCpuOnly && isGpuOnly)
     {
@@ -136,8 +137,8 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
     
-    int N = 2000000; // number of objects
-    int k = 10;
+    //int N = 2000000; // number of objects
+    //int k = 10;
     //auto objects = readObjectsFromFile<SMALL_DIM>(filepath, &N);
     auto objects = generateRandomData<SMALL_DIM>(N);
 
@@ -157,12 +158,12 @@ int main(int argc, char** argv)
 
     if (!isCpuOnly)
     {
-        std::cout << "Solving kmeans cpu..." << std::endl;
+        std::cout << "Solving kmeans gpu..." << std::endl;
         auto start = std::chrono::high_resolution_clock::now();
         gpuMembership = kmeansGpu<SMALL_DIM>(objects, N, k, &gpuCenters);
         auto stop = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-        std::cout << "Total time for cpu: " << duration.count() << " microseconds" << std::endl;
+        std::cout << "Total time for gpu: " << duration.count() << " microseconds" << std::endl;
 
         writeResultsToFile<SMALL_DIM>("results/gpu.membership", "results/gpu.centers", N, k, gpuMembership, gpuCenters);
     }
