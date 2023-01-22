@@ -9,7 +9,6 @@
 #include "kmeansgpu.cuh"
 
 #define DIM 3
-#define COMPARISON_ERROR 0.1f
 
 template<unsigned int n>
 float* readObjectsFromFile(std::string filepath, int* N)
