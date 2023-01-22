@@ -80,6 +80,30 @@ float* generateRandomData(int N, int seed = 1234)
     return data;
 }
 
+template<unsigned int n>
+void checkResults(float* cpuCenters, float* gpuCenters, int* cpuMembership, int* gpuMembership, int N, int k)
+{
+    for (int i = 0; i < k * n; ++i)
+    {
+        if (cpuCenters[i] != gpuCenters[i])
+        {
+            std::cout << "Cluster centers do not match" << std::endl;
+            return;
+        }
+    }
+
+    for (int i = 0; i < N; ++i)
+    {
+        if (cpuMembership[i] != gpuMembership[i])
+        {
+            std::cout << "Cluster memberships do not match" << std::endl;
+            return;
+        }
+    }
+
+    std::cout << "Cpu and gpu results match" << std::endl;
+}
+
 void usage()
 {
     std::cout << "Usage:" << std::endl;
@@ -199,6 +223,13 @@ int main(int argc, char** argv)
         writeResultsToFile<DIM>("results/gpu.membership", "results/gpu.centers", N, k, gpuMembership, gpuCenters);
     }
 
+    if(!isCpuOnly && !isGpuOnly)
+    {
+        std::cout << std::endl;
+        checkResults<DIM>(cpuCenters, gpuCenters, cpuMembership, gpuMembership, N, k);
+    }
+
+    std::cout << std::endl;
     std::cout << "Deleting objects" << std::endl;
     delete[] objects;
     if(!isGpuOnly)
