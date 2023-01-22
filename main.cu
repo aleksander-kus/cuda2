@@ -9,6 +9,7 @@
 #include "kmeansgpu.cuh"
 
 #define DIM 3
+#define COMPARISON_ERROR 0.1f
 
 template<unsigned int n>
 float* readObjectsFromFile(std::string filepath, int* N)
@@ -81,27 +82,14 @@ float* generateRandomData(int N, int seed = 1234)
 }
 
 template<unsigned int n>
-void checkResults(float* cpuCenters, float* gpuCenters, int* cpuMembership, int* gpuMembership, int N, int k)
+void calculateAverageDistance(const float* objects, const float* centers, const int* membership, int N)
 {
-    for (int i = 0; i < k * n; ++i)
+    float sum = 0;
+    for(int i = 0; i < N; ++i)
     {
-        if (cpuCenters[i] != gpuCenters[i])
-        {
-            std::cout << "Cluster centers do not match" << std::endl;
-            return;
-        }
+        sum += sqrt(distanceSquared<n>(objects + i * n, centers + membership[i] * n));
     }
-
-    for (int i = 0; i < N; ++i)
-    {
-        if (cpuMembership[i] != gpuMembership[i])
-        {
-            std::cout << "Cluster memberships do not match" << std::endl;
-            return;
-        }
-    }
-
-    std::cout << "Cpu and gpu results match" << std::endl;
+    std::cout << "Average object to center distance is " << sum / N << std::endl;
 }
 
 void usage()
@@ -114,6 +102,8 @@ void usage()
     std::cout << "  -f, --file          specify a path to a file with data" << std::endl;
     std::cout << "  -g, --gpu-only      only run gpu algorithm" << std::endl;
     std::cout << "  -n, --generate      generate a random set of N objects" << std::endl;
+    std::cout << "  -1                  use the first gpu algorithm" << std::endl;
+    std::cout << "  -2                  use the second gpu algorithm" << std::endl;
     exit(EXIT_FAILURE);
 }
 
@@ -125,6 +115,7 @@ int main(int argc, char** argv)
     bool isFile = false;
     bool isGenerate = false;
     bool isDebug = false;
+    bool isFirstGpu = false;
     static struct option long_options[] = {
         {"cpu-only", no_argument, NULL, 'c'},
         {"file", required_argument, NULL, 'f'},
@@ -138,12 +129,18 @@ int main(int argc, char** argv)
 
     while (1)
     {
-        c = getopt_long(argc, argv, "cdf:gn:", long_options, NULL);
+        c = getopt_long(argc, argv, "cdf:gn:12", long_options, NULL);
         if(c == -1)
             break;
 
         switch(c)
         {
+            case '1':
+                isFirstGpu = true;
+                break;
+            case '2':
+                isFirstGpu = false;
+                break;
             case 'c':
                 isCpuOnly = true;
                 break;
@@ -205,6 +202,8 @@ int main(int argc, char** argv)
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
         std::cout << "Total time for cpu: " << duration.count() << " microseconds" << std::endl;
 
+        calculateAverageDistance<DIM>(objects, cpuCenters, cpuMembership, N);
+
         std::cout << "Writing cpu results to files results/cpu.membership and results/cpu.centers" << std::endl;
         writeResultsToFile<DIM>("results/cpu.membership", "results/cpu.centers", N, k, cpuMembership, cpuCenters);
     }
@@ -214,19 +213,22 @@ int main(int argc, char** argv)
         std::cout << std::endl;
         std::cout << "Solving kmeans gpu..." << std::endl;
         auto start = std::chrono::high_resolution_clock::now();
-        gpuMembership = kmeansGpu<DIM>(objects, N, k, &gpuCenters, isDebug);
+        if (isFirstGpu)
+        {
+            gpuMembership = kmeansGpu<DIM>(objects, N, k, &gpuCenters, isDebug);
+        }
+        else
+        {
+            gpuMembership = kmeansGpu2<DIM>(objects, N, k, &gpuCenters, isDebug);
+        }
         auto stop = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
         std::cout << "Total time for gpu: " << duration.count() << " microseconds" << std::endl;
 
+        calculateAverageDistance<DIM>(objects, gpuCenters, gpuMembership, N);
+
         std::cout << "Writing gpu results to files results/gpu.membership and results/gpu.centers" << std::endl;
         writeResultsToFile<DIM>("results/gpu.membership", "results/gpu.centers", N, k, gpuMembership, gpuCenters);
-    }
-
-    if(!isCpuOnly && !isGpuOnly)
-    {
-        std::cout << std::endl;
-        checkResults<DIM>(cpuCenters, gpuCenters, cpuMembership, gpuMembership, N, k);
     }
 
     std::cout << std::endl;
