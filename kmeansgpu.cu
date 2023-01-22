@@ -64,16 +64,16 @@ __global__ void calculateDelta(const int *membershipChanged, int arraySize, int 
 template<unsigned int n>
 __global__ void calculateNewCenters(float* centers, const float* clusterSum, const int* clusterCount, int k)
 {
-    auto objectId = blockDim.x * blockIdx.x + threadIdx.x;
+    auto clusterId = blockDim.x * blockIdx.x + threadIdx.x;
 
-    if(objectId >= k || clusterCount[objectId] == 0)
+    if(clusterId >= k || clusterCount[clusterId] == 0)
     {
         return;
     }
 
     for(int i = 0; i < n; ++i)
     {
-        centers[objectId * n + i] = clusterSum[objectId * n + i] / clusterCount[objectId];
+        centers[clusterId * n + i] = clusterSum[clusterId * n + i] / clusterCount[clusterId];
     }
 }
 
