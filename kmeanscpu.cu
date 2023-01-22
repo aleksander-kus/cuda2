@@ -32,7 +32,7 @@ __host__ __device__ inline int getClosestCenterIndex(const float* object, const 
 }
 
 template <unsigned int n>
-int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float threshold)
+int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, bool isDebug, float threshold)
 {
     auto delta = 0;
     float* centers = new float[k * n];
@@ -69,8 +69,6 @@ int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float 
             }
         }
 
-        //std::cout << "Delta " << delta << " N " << N << std::endl;
-
         // calculate new cluster centers as averages of cluster members
         for (int i = 0; i < k; ++i)
         {
@@ -81,11 +79,12 @@ int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float 
             for (int j = 0; j < n; ++j)
             {
                 centers[i * n + j] = clusterSum[i * n + j] / clusterCount[i];
-                //std::cout << centers[i * n + j] << ' ';
             }
-            //std::cout << std::endl;
         }
-        std::cout << "End of an iteration with delta " << delta << std::endl;
+        if(isDebug)
+        {
+            std::cout << "End of an iteration with delta " << delta << std::endl;
+        }
     } while ((float)delta / N > threshold);
 
     delete[] clusterSum;

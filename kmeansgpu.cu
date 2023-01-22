@@ -1,11 +1,7 @@
-#include "cuda_runtime.h"
-
-#include <iostream>
-#include <chrono>
-
 #include "kmeanscpu.cuh"
 
-#define GRID_SIZE 1024
+#include "cuda_runtime.h"
+
 #define BLOCK_SIZE 1024
 
 #define ERR(status) { \
@@ -82,7 +78,7 @@ __global__ void calculateNewCenters(float* centers, const float* clusterSum, con
 }
 
 template <unsigned int n>
-int* kmeansGpu(const float* objects, int N, int k, float** centersOutput, float threshold)
+int* kmeansGpu(const float* objects, int N, int k, float** centersOutput, bool isDebug, float threshold)
 {
     int gridSize = (float)N / BLOCK_SIZE + 1; // we want to have enough threads to cover the whole objects array (one thread -> one object)
     auto delta = 0;
@@ -138,7 +134,10 @@ int* kmeansGpu(const float* objects, int N, int k, float** centersOutput, float 
 
         // calculate new cluster centers as averages of cluster members
         calculateNewCenters<n><<<(float)k / BLOCK_SIZE + 1, BLOCK_SIZE>>>(dev_centers, dev_clusterSum, dev_clusterCount, k);
-        std::cout << "End of an iteration with delta " << delta << std::endl;
+        if (isDebug)
+        {
+            std::cout << "End of an iteration with delta " << delta << std::endl;
+        }
     } while ((float)delta / N > threshold);
 
     float* centers = new float[k * n];

@@ -2,7 +2,7 @@
 #define KMEANS_CPU_CUH
 
 template <unsigned int n>
-int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, float threshold = 0.001f);
+int* kmeansCpu(const float* objects, int N, int k, float** centersOutput, bool isDebug = false, float threshold = 0.001f);
 
 #include "kmeanscpu.cu"
 
